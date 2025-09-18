@@ -27,6 +27,10 @@ app.add_middleware(
 
 llm = LLMClient()
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy"}
+
 @app.websocket("/chat")
 async def websocket_endpoint(websocket: WebSocket):
     logger.info("WebSocket connection request received")
