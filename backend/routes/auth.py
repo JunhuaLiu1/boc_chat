@@ -178,28 +178,37 @@ async def login(
 ):
     """User login endpoint"""
     try:
+        logger.info(f"Attempting login for email: {request.email}")
+        
         # Get user by email
+        logger.info("Fetching user by email")
         user = await supabase.get_user_by_email(request.email)
         if not user:
+            logger.warning(f"User not found for email: {request.email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="邮箱或密码错误"
             )
         
+        logger.info("User found, verifying password")
         # Verify password
         if not password_manager.verify_password(request.password, user['password_hash']):
+            logger.warning(f"Password verification failed for email: {request.email}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="邮箱或密码错误"
             )
         
+        logger.info("Password verified, checking if user is active")
         # Check if user is active
         if not user.get('is_active', False):
+            logger.warning(f"User account is disabled for email: {request.email}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="账户已被禁用"
             )
         
+        logger.info("User is active, generating tokens")
         # Get user ID and convert to string if it's a UUID
         user_id = user['id']
         if isinstance(user_id, uuid.UUID):
@@ -209,12 +218,16 @@ async def login(
         token_expires = timedelta(hours=24 if request.remember_me else 1)
         token_data = {"sub": user_id, "email": user['email']}
         
+        logger.info("Creating access token")
         access_token = token_manager.create_access_token(
             data=token_data, 
             expires_delta=token_expires
         )
+        
+        logger.info("Creating refresh token")
         refresh_token = token_manager.create_refresh_token(data=token_data)
         
+        logger.info("Tokens created, saving session")
         # Save session (optional)
         try:
             session_data = {
@@ -229,9 +242,11 @@ async def login(
         except Exception as e:
             logger.warning(f"Failed to save session: {e}")
         
+        logger.info("Updating last login")
         # Update last login
         await supabase.update_last_login(user_id)
         
+        logger.info("Creating response")
         # Create response
         # Convert any UUID objects in user dict to strings
         user_dict = convert_uuids_to_strings(dict(user))
@@ -250,6 +265,10 @@ async def login(
         raise
     except Exception as e:
         logger.error(f"Login error: {e}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error args: {e.args}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="登录失败"

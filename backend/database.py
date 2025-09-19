@@ -144,7 +144,6 @@ class SupabaseClient:
                 )
                 user_record = result.fetchone()
                 session.commit()
-                user_record = result.fetchone()
                 if user_record:
                     logger.info(f"User created successfully with direct PostgreSQL: {user_data['email']}")
                     # 安全地将Row对象转换为字典并处理UUID对象
@@ -191,7 +190,6 @@ class SupabaseClient:
                 )
                 user_record = result.fetchone()
                 session.commit()
-                user_record = result.fetchone()
                 if user_record:
                     # 安全地将Row对象转换为字典并处理UUID对象
                     user_data = dict(user_record._mapping) if hasattr(user_record, '_mapping') else dict(user_record)
@@ -230,7 +228,7 @@ class SupabaseClient:
                 )
                 user_record = result.fetchone()
                 session.commit()
-                return result.fetchone() is not None
+                return user_record is not None
             finally:
                 session.close()
         except Exception as e:
@@ -257,7 +255,7 @@ class SupabaseClient:
                 )
                 user_record = result.fetchone()
                 session.commit()
-                return result.fetchone() is not None
+                return user_record is not None
             finally:
                 session.close()
         except Exception as e:
@@ -270,17 +268,27 @@ class SupabaseClient:
             # 使用直接PostgreSQL连接
             session = get_db_session()
             try:
+                # Map the session data to correct column names
+                db_session_data = {
+                    'user_id': session_data.get('user_id'),
+                    'token_hash': session_data.get('token_hash'),
+                    'refresh_token_hash': session_data.get('refresh_token_hash'),
+                    'expires_at': session_data.get('expires_at'),
+                    'created_at': datetime.utcnow().isoformat(),
+                    'ip_address': session_data.get('ip_address'),
+                    'user_agent': session_data.get('user_agent')
+                }
+                
                 result = session.execute(
                     sqlalchemy.text("""
-                        INSERT INTO user_sessions (user_id, session_token, expires_at, created_at, updated_at)
-                        VALUES (:user_id, :session_token, :expires_at, :created_at, :updated_at)
+                        INSERT INTO user_sessions (user_id, token_hash, refresh_token_hash, expires_at, created_at, ip_address, user_agent)
+                        VALUES (:user_id, :token_hash, :refresh_token_hash, :expires_at, :created_at, :ip_address, :user_agent)
                         RETURNING *
                     """),
-                    session_data
+                    db_session_data
                 )
                 session_record = result.fetchone()
                 session.commit()
-                session_record = result.fetchone()
                 if session_record:
                     # 安全地将Row对象转换为字典并处理UUID对象
                     session_data = dict(session_record._mapping) if hasattr(session_record, '_mapping') else dict(session_record)
@@ -345,7 +353,7 @@ class SupabaseClient:
                 )
                 session_record = result.fetchone()
                 session.commit()
-                return result.fetchone() is not None
+                return session_record is not None
             finally:
                 session.close()
         except Exception as e:
@@ -375,7 +383,6 @@ class SupabaseClient:
                 )
                 token_record = result.fetchone()
                 session.commit()
-                token_record = result.fetchone()
                 if token_record:
                     # Convert any UUID objects to strings
                     token_data = dict(token_record)
@@ -439,7 +446,7 @@ class SupabaseClient:
                 )
                 session_record = result.fetchone()
                 session.commit()
-                return result.fetchone() is not None
+                return session_record is not None
             finally:
                 session.close()
         except Exception as e:
