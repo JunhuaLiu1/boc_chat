@@ -1,0 +1,17 @@
+{
+  "name": "chat-mvp",
+  "version": "1.0.0",
+  "description": "Chat MVP with frontend and backend",
+  "scripts": {
+    "dev": "concurrently \"cd frontend && npm run dev\" \"cd backend && python app.py\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python app.py",
+    "install:all": "cd frontend && npm install && cd ../backend && pip install -r requirements.txt"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["chat", "mvp", "websocket"],
+  "author": "",
+  "license": "MIT"
+}

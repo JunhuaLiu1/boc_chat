@@ -15,6 +15,8 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // 添加 withCredentials 以支持 CORS
+  withCredentials: true
 });
 
 // Token management

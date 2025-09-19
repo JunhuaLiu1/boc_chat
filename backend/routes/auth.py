@@ -6,6 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 import logging
+import uuid
 
 from models.auth import (
     UserCreate, UserLogin, UserResponse, AuthResponse, 
@@ -22,6 +23,28 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 security = HTTPBearer()
+
+def convert_uuids_to_strings(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert all UUID objects in a dictionary to strings"""
+    result = {}
+    for key, value in data.items():
+        if isinstance(value, uuid.UUID):
+            result[key] = str(value)
+        elif isinstance(value, dict):
+            result[key] = convert_uuids_to_strings(value)
+        elif isinstance(value, list):
+            result[key] = [
+                convert_uuids_to_strings(item) if isinstance(item, dict) else
+                str(item) if isinstance(item, uuid.UUID) else item
+                for item in value
+            ]
+        # 处理 SQLite 数据库中的整数 ID
+        elif key == 'id' and isinstance(value, int):
+            result[key] = str(value)
+        else:
+            result[key] = value
+    return result
+
 
 # Dependency to get current user
 async def get_current_user(
@@ -49,6 +72,10 @@ async def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
+        # Convert user_id to string if it's a UUID object
+        if isinstance(user_id, uuid.UUID):
+            user_id = str(user_id)
+        
         user = await supabase.get_user_by_id(user_id)
         if not user:
             raise HTTPException(
@@ -62,6 +89,9 @@ async def get_current_user(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="User account is disabled"
             )
+        
+        # Convert any UUID objects in user dict to strings
+        user = convert_uuids_to_strings(user)
         
         return user
         
@@ -114,14 +144,18 @@ async def register(
         new_user = await supabase.create_user(user_data)
         if not new_user:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="用户创建失败"
+                status_code=status.HTTP_409_CONFLICT,
+                detail="该邮箱已被注册"
             )
+        
+        # Convert any UUID objects in user dict to strings
+        new_user = convert_uuids_to_strings(new_user)
+        user_id = new_user['id']
         
         logger.info(f"User registered successfully: {request.email}")
         return {
             "message": "注册成功，请登录",
-            "user_id": new_user['id']
+            "user_id": user_id
         }
         
     except HTTPException:
@@ -166,9 +200,14 @@ async def login(
                 detail="账户已被禁用"
             )
         
+        # Get user ID and convert to string if it's a UUID
+        user_id = user['id']
+        if isinstance(user_id, uuid.UUID):
+            user_id = str(user_id)
+        
         # Generate tokens
         token_expires = timedelta(hours=24 if request.remember_me else 1)
-        token_data = {"sub": user['id'], "email": user['email']}
+        token_data = {"sub": user_id, "email": user['email']}
         
         access_token = token_manager.create_access_token(
             data=token_data, 
@@ -179,7 +218,7 @@ async def login(
         # Save session (optional)
         try:
             session_data = {
-                "user_id": user['id'],
+                "user_id": user_id,
                 "token_hash": SecurityUtils().hash_token(access_token),
                 "refresh_token_hash": SecurityUtils().hash_token(refresh_token),
                 "expires_at": (datetime.utcnow() + token_expires).isoformat(),
@@ -191,10 +230,13 @@ async def login(
             logger.warning(f"Failed to save session: {e}")
         
         # Update last login
-        await supabase.update_last_login(user['id'])
+        await supabase.update_last_login(user_id)
         
         # Create response
-        user_response = UserResponse(**user)
+        # Convert any UUID objects in user dict to strings
+        user_dict = convert_uuids_to_strings(dict(user))
+        
+        user_response = UserResponse(**user_dict)
         auth_response = AuthResponse(
             user=user_response,
             access_token=access_token,
@@ -329,6 +371,10 @@ async def reset_password(
                 detail="无效的重置令牌"
             )
         
+        # Convert user_id to string if it's a UUID object
+        if isinstance(user_id, uuid.UUID):
+            user_id = str(user_id)
+        
         # Check if token exists and is not used
         token_hash = security_utils.hash_token(request.token)
         reset_token_record = await supabase.get_reset_token(token_hash)
@@ -345,6 +391,9 @@ async def reset_password(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="用户不存在"
             )
+        
+        # Convert any UUID objects in user dict to strings
+        user = convert_uuids_to_strings(user)
         
         # Hash new password
         new_password_hash = password_manager.hash_password(request.password)
@@ -381,7 +430,9 @@ async def get_current_user_info(
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
     """Get current user information"""
-    return UserResponse(**current_user)
+    # Convert any UUID objects in user dict to strings
+    user_data = convert_uuids_to_strings(current_user)
+    return UserResponse(**user_data)
 
 
 @router.post("/change-password")
@@ -393,6 +444,11 @@ async def change_password(
 ):
     """Change user password"""
     try:
+        # Get current user ID and convert to string if it's a UUID
+        user_id = current_user['id']
+        if isinstance(user_id, uuid.UUID):
+            user_id = str(user_id)
+        
         # Verify current password
         if not password_manager.verify_password(request.current_password, current_user['password_hash']):
             raise HTTPException(
@@ -404,7 +460,7 @@ async def change_password(
         new_password_hash = password_manager.hash_password(request.new_password)
         
         # Update password
-        update_result = await supabase.update_user(current_user['id'], {
+        update_result = await supabase.update_user(user_id, {
             "password_hash": new_password_hash
         })
         
@@ -436,8 +492,13 @@ async def logout(
 ):
     """Logout user and invalidate session"""
     try:
+        # Get current user ID and convert to string if it's a UUID
+        user_id = current_user['id']
+        if isinstance(user_id, uuid.UUID):
+            user_id = str(user_id)
+        
         # Get sessions and try to delete current session
-        sessions = await supabase.get_user_sessions(current_user['id'])
+        sessions = await supabase.get_user_sessions(user_id)
         token_hash = security_utils.hash_token(credentials.credentials)
         
         for session in sessions:

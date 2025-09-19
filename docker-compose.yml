@@ -20,6 +20,8 @@ services:
       # 持久化存储文件和向量数据库
       - ./backend/storage:/app/storage
       - ./backend/data:/app/data
+      # 持久化 SQLite 数据库
+      - ./backend/chat_app.db:/app/chat_app.db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

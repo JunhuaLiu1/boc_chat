@@ -116,6 +116,14 @@ const useWebSocket = () => {
         setIsTyping(false);
         activeConversationRef.current = null;
         clearHeartbeat();
+        
+        // 1001 表示客户端主动关闭，不需要自动重连
+        if (event.code === 1001) {
+          console.log('客户端主动关闭连接，不进行自动重连');
+          return;
+        }
+        
+        // 其他情况才进行重连
         scheduleReconnect();
       };
 

@@ -63,6 +63,13 @@ export API_KEY=your_qwen_api_key_here
 uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
+### 3. 初始化数据库（首次运行时）
+
+```bash
+# 在 backend 目录下运行 SQLite 数据库初始化脚本
+python init_sqlite_db.py
+```
+
 ### 2. 前端启动
 
 ```bash

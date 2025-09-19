@@ -3,11 +3,11 @@ Database initialization script for BOCAI Chat MVP
 Creates tables and security policies in Supabase PostgreSQL
 """
 
+
 SUPABASE_SQL_SCHEMA = """
 -- ===================================
--- BOCAI Chat MVP Database Schema
+-- BOCAI Chat MVP Database Schema for PostgreSQL
 -- ===================================
-
 -- 删除已存在的表（如果需要重建）
 -- DROP TABLE IF EXISTS public.password_reset_tokens CASCADE;
 -- DROP TABLE IF EXISTS public.user_sessions CASCADE;

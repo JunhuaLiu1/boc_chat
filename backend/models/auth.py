@@ -48,7 +48,7 @@ class UserLogin(BaseModel):
 
 class UserResponse(UserBase):
     """User response model (safe for API responses)"""
-    id: str
+    id: str = None
     avatar_url: Optional[str] = None
     email_verified: bool = False
     created_at: datetime

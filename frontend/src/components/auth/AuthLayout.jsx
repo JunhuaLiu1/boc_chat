@@ -3,7 +3,6 @@
  */
 import React from 'react';
 import { motion } from 'framer-motion';
-import BocaiIcon from '../BocaiIcon';
 import { cn } from '../../utils/appleTheme';
 
 const AuthLayout = ({
@@ -30,8 +29,12 @@ const AuthLayout = ({
               transition={{ duration: 0.3, delay: 0.1 }}
               className="flex justify-center mb-4"
             >
-              <div className="w-16 h-16 bg-apple-blue rounded-apple-xl flex items-center justify-center shadow-apple-lg">
-                <BocaiIcon className="w-10 h-10 text-white" />
+              <div className="w-16 h-16 bg-white rounded-apple-xl flex items-center justify-center shadow-apple-lg p-2">
+                <img 
+                  src="/images/logo1.png" 
+                  alt="BOCAI Logo" 
+                  className="w-full h-full object-contain"
+                />
               </div>
             </motion.div>
             

@@ -8,8 +8,36 @@ import os
 import logging
 from datetime import datetime, timedelta
 import json
+import sqlalchemy
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import uuid
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+# 加载环境变量
+load_dotenv()
+
+# SQLAlchemy setup for direct PostgreSQL connection
+Base = declarative_base()
+engine = None
+SessionLocal = None
+
+def get_db_engine():
+    """Get SQLAlchemy database engine"""
+    global engine
+    if engine is None:
+        # 优先使用环境变量中的 DATABASE_URL，如果没有则使用默认的 SQLite 数据库
+        database_url = os.getenv("DATABASE_URL", "sqlite:///./chat_app.db")
+        engine = sqlalchemy.create_engine(database_url, connect_args={"check_same_thread": False} if "sqlite" in database_url else {})
+    return engine
+
+def get_db_session():
+    """Get SQLAlchemy database session"""
+    engine = get_db_engine()
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    return SessionLocal()
 
 
 class SupabaseClient:
@@ -17,32 +45,39 @@ class SupabaseClient:
     
     def __init__(self):
         """Initialize Supabase client"""
-        url = os.getenv("SUPABASE_URL")
-        anon_key = os.getenv("SUPABASE_ANON_KEY")
-        service_key = os.getenv("SUPABASE_SERVICE_KEY", "")
+        # 初始化SQLAlchemy引擎
+        self.db_engine = get_db_engine()
+        logger.info("PostgreSQL database engine initialized successfully")
         
-        if not url or not anon_key:
-            raise ValueError("Missing SUPABASE_URL or SUPABASE_ANON_KEY environment variables")
-        
-        # 常规客户端使用匿名密钥
-        self.client: Client = create_client(url, anon_key)
-        
-        # 管理客户端使用服务密钥（如果有），用于绕过RLS进行管理操作
+        # 完全禁用Supabase客户端，仅使用直接PostgreSQL连接
+        self.client = None
         self.admin_client = None
-        if service_key and service_key != "your_supabase_service_key_here":
-            try:
-                self.admin_client = create_client(url, service_key)
-                logger.info("Supabase admin client initialized successfully")
-            except Exception as e:
-                logger.warning(f"Failed to initialize admin client: {e}")
-        
-        logger.info("Supabase client initialized successfully")
+        logger.info("Using direct PostgreSQL connection only")
     
     async def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
         """Get user by email address"""
         try:
-            response = self.client.table('users').select('*').eq('email', email).single().execute()
-            return response.data if response.data else None
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("SELECT * FROM users WHERE email = :email"),
+                    {"email": email}
+                ).fetchone()
+                if result:
+                    # 安全地将Row对象转换为字典
+                    user_data = dict(result._mapping) if hasattr(result, '_mapping') else dict(result)
+                    # Convert any UUID objects to strings
+                    for key, value in user_data.items():
+                        if isinstance(value, uuid.UUID):
+                            user_data[key] = str(value)
+                        # 处理 SQLite 数据库中的整数 ID
+                        elif key == 'id' and isinstance(value, int):
+                            user_data[key] = str(value)
+                    return user_data
+                return None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error getting user by email {email}: {e}")
             return None
@@ -50,8 +85,27 @@ class SupabaseClient:
     async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user by ID"""
         try:
-            response = self.client.table('users').select('*').eq('id', user_id).single().execute()
-            return response.data if response.data else None
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("SELECT * FROM users WHERE id = :user_id"),
+                    {"user_id": user_id}
+                ).fetchone()
+                if result:
+                    # 安全地将Row对象转换为字典
+                    user_data = dict(result._mapping) if hasattr(result, '_mapping') else dict(result)
+                    # Convert any UUID objects to strings
+                    for key, value in user_data.items():
+                        if isinstance(value, uuid.UUID):
+                            user_data[key] = str(value)
+                        # 处理 SQLite 数据库中的整数 ID
+                        elif key == 'id' and isinstance(value, int):
+                            user_data[key] = str(value)
+                    return user_data
+                return None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error getting user by ID {user_id}: {e}")
             return None
@@ -74,83 +128,83 @@ class SupabaseClient:
             existing_user = await self.get_user_by_email(user_data['email'])
             if existing_user:
                 logger.warning(f"User already exists: {user_data['email']}")
-                return existing_user
+                return None  # 返回None表示用户已存在
             
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
             try:
-                # 首先尝试使用admin_client（如果有且不是默认占位符）
-                if hasattr(self, 'admin_client') and self.admin_client:
-                    logger.debug(f"Using admin client to create user: {user_data['email']}")
-                    response = self.admin_client.table('users').insert(
-                        db_user,
-                        ignore_duplicates=True
-                    ).execute()
-                    
-                    if response.data:
-                        logger.info(f"User created successfully with admin client: {user_data['email']}")
-                        return response.data[0]
-            except Exception as admin_error:
-                logger.warning(f"Admin client failed: {admin_error}")
+                # 使用SQLAlchemy执行插入操作
+                result = session.execute(
+                    sqlalchemy.text("""
+                        INSERT INTO users (email, name, password_hash, email_verified, is_active, created_at, updated_at)
+                        VALUES (:email, :name, :password_hash, :email_verified, :is_active, :created_at, :updated_at)
+                        RETURNING *
+                    """),
+                    db_user
+                )
+                user_record = result.fetchone()
+                session.commit()
+                user_record = result.fetchone()
+                if user_record:
+                    logger.info(f"User created successfully with direct PostgreSQL: {user_data['email']}")
+                    # 安全地将Row对象转换为字典并处理UUID对象
+                    user_data = dict(user_record._mapping) if hasattr(user_record, '_mapping') else dict(user_record)
+                    for key, value in user_data.items():
+                        if isinstance(value, uuid.UUID):
+                            user_data[key] = str(value)
+                        # 处理 SQLite 数据库中的整数 ID
+                        elif key == 'id' and isinstance(value, int):
+                            user_data[key] = str(value)
+                    return user_data
+            except Exception as sql_error:
+                session.rollback()
+                logger.error(f"SQL insertion error: {sql_error}")
+                raise
+            finally:
+                session.close()
             
-            try:
-                # 然后尝试使用常规客户端
-                logger.debug(f"Using regular client to create user: {user_data['email']}")
-                response = self.client.table('users').insert(
-                    db_user,
-                    ignore_duplicates=True
-                ).execute()
-                
-                if response.data:
-                    logger.info(f"User created successfully with regular client: {user_data['email']}")
-                    return response.data[0]
-            except Exception as regular_error:
-                logger.warning(f"Regular client insertion failed: {regular_error}")
-            
-            # 如果以上方法都失败，提供一个模拟的用户对象
-            # 这是一个临时解决方案，用于开发环境测试
-            logger.info(f"Falling back to mock user creation for: {user_data['email']}")
-            
-            # 创建一个模拟用户对象
-            mock_user = {
-                'id': str(uuid.uuid4()),
-                'email': user_data['email'],
-                'name': user_data['name'],
-                'email_verified': False,
-                'is_active': True,
-                'created_at': datetime.utcnow().isoformat(),
-                'updated_at': datetime.utcnow().isoformat()
-            }
-            
-            logger.info(f"Mock user created successfully. In production, please configure a valid Supabase service key.")
-            return mock_user
+            # 如果所有方法都失败，抛出异常
+            logger.error(f"Failed to create user {user_data['email']} with all methods")
+            raise Exception(f"Unable to create user: {user_data['email']}")
             
         except Exception as e:
             logger.error(f"Error creating user {user_data.get('email')}: {e}")
-            # 在开发环境中，提供一个模拟用户对象以确保功能可用
-            if os.getenv("ENVIRONMENT") == "development":
-                logger.info("Development mode: returning mock user object")
-                mock_user = {
-                    'id': str(uuid.uuid4()),
-                    'email': user_data['email'],
-                    'name': user_data['name'],
-                    'email_verified': False,
-                    'is_active': True,
-                    'created_at': datetime.utcnow().isoformat(),
-                    'updated_at': datetime.utcnow().isoformat()
-                }
-                return mock_user
-            return None
-        except Exception as e:
-            logger.error(f"Error creating user {user_data.get('email')}: {e}")
-            return None
+            raise
     
     async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Update user information"""
         try:
             update_data['updated_at'] = datetime.utcnow().isoformat()
-            response = self.client.table('users').update(update_data).eq('id', user_id).execute()
-            if response.data:
-                return response.data[0]
-            return None
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                # 构建更新语句
+                set_clause = ", ".join([f"{key} = :{key}" for key in update_data.keys()])
+                result = session.execute(
+                    sqlalchemy.text(f"""
+                        UPDATE users
+                        SET {set_clause}
+                        WHERE id = :user_id
+                        RETURNING *
+                    """),
+                    {**update_data, "user_id": user_id}
+                )
+                user_record = result.fetchone()
+                session.commit()
+                user_record = result.fetchone()
+                if user_record:
+                    # 安全地将Row对象转换为字典并处理UUID对象
+                    user_data = dict(user_record._mapping) if hasattr(user_record, '_mapping') else dict(user_record)
+                    for key, value in user_data.items():
+                        if isinstance(value, uuid.UUID):
+                            user_data[key] = str(value)
+                        # 处理 SQLite 数据库中的整数 ID
+                        elif key == 'id' and isinstance(value, int):
+                            user_data[key] = str(value)
+                    return user_data
+                return None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error updating user {user_id}: {e}")
             return None
@@ -158,11 +212,27 @@ class SupabaseClient:
     async def update_last_login(self, user_id: str) -> bool:
         """Update user's last login timestamp"""
         try:
-            response = self.client.table('users').update({
-                'last_login_at': datetime.utcnow().isoformat(),
-                'updated_at': datetime.utcnow().isoformat()
-            }).eq('id', user_id).execute()
-            return bool(response.data)
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("""
+                        UPDATE users
+                        SET last_login_at = :last_login_at, updated_at = :updated_at
+                        WHERE id = :user_id
+                        RETURNING id
+                    """),
+                    {
+                        "last_login_at": datetime.utcnow().isoformat(),
+                        "updated_at": datetime.utcnow().isoformat(),
+                        "user_id": user_id
+                    }
+                )
+                user_record = result.fetchone()
+                session.commit()
+                return result.fetchone() is not None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error updating last login for user {user_id}: {e}")
             return False
@@ -170,11 +240,26 @@ class SupabaseClient:
     async def deactivate_user(self, user_id: str) -> bool:
         """Deactivate a user account"""
         try:
-            response = self.client.table('users').update({
-                'is_active': False,
-                'updated_at': datetime.utcnow().isoformat()
-            }).eq('id', user_id).execute()
-            return bool(response.data)
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("""
+                        UPDATE users
+                        SET is_active = false, updated_at = :updated_at
+                        WHERE id = :user_id
+                        RETURNING id
+                    """),
+                    {
+                        "updated_at": datetime.utcnow().isoformat(),
+                        "user_id": user_id
+                    }
+                )
+                user_record = result.fetchone()
+                session.commit()
+                return result.fetchone() is not None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error deactivating user {user_id}: {e}")
             return False
@@ -182,10 +267,33 @@ class SupabaseClient:
     async def save_user_session(self, session_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Save user session data"""
         try:
-            response = self.client.table('user_sessions').insert(session_data).execute()
-            if response.data:
-                return response.data[0]
-            return None
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("""
+                        INSERT INTO user_sessions (user_id, session_token, expires_at, created_at, updated_at)
+                        VALUES (:user_id, :session_token, :expires_at, :created_at, :updated_at)
+                        RETURNING *
+                    """),
+                    session_data
+                )
+                session_record = result.fetchone()
+                session.commit()
+                session_record = result.fetchone()
+                if session_record:
+                    # 安全地将Row对象转换为字典并处理UUID对象
+                    session_data = dict(session_record._mapping) if hasattr(session_record, '_mapping') else dict(session_record)
+                    for key, value in session_data.items():
+                        if isinstance(value, uuid.UUID):
+                            session_data[key] = str(value)
+                        # 处理 SQLite 数据库中的整数 ID
+                        elif key == 'id' and isinstance(value, int):
+                            session_data[key] = str(value)
+                    return session_data
+                return None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error saving user session: {e}")
             return None
@@ -193,8 +301,34 @@ class SupabaseClient:
     async def get_user_sessions(self, user_id: str) -> List[Dict[str, Any]]:
         """Get all active sessions for a user"""
         try:
-            response = self.client.table('user_sessions').select('*').eq('user_id', user_id).gte('expires_at', datetime.utcnow().isoformat()).execute()
-            return response.data if response.data else []
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("""
+                        SELECT * FROM user_sessions 
+                        WHERE user_id = :user_id 
+                        AND expires_at >= :now
+                    """),
+                    {"user_id": user_id, "now": datetime.utcnow().isoformat()}
+                )
+                sessions = result.fetchall()
+                # 处理 SQLite 数据库中的结果
+                processed_sessions = []
+                for s in sessions:
+                    session_dict = dict(s)
+                    # 处理 SQLite 数据库中的整数 ID
+                    for key, value in session_dict.items():
+                        if isinstance(value, uuid.UUID):
+                            session_dict[key] = str(value)
+                        elif key == 'id' and isinstance(value, int):
+                            session_dict[key] = str(value)
+                        elif key == 'user_id' and isinstance(value, int):
+                            session_dict[key] = str(value)
+                    processed_sessions.append(session_dict)
+                return processed_sessions
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error getting user sessions for {user_id}: {e}")
             return []
@@ -202,8 +336,18 @@ class SupabaseClient:
     async def delete_user_session(self, session_id: str) -> bool:
         """Delete a user session"""
         try:
-            response = self.client.table('user_sessions').delete().eq('id', session_id).execute()
-            return bool(response.data)
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("DELETE FROM user_sessions WHERE id = :session_id RETURNING id"),
+                    {"session_id": session_id}
+                )
+                session_record = result.fetchone()
+                session.commit()
+                return result.fetchone() is not None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error deleting session {session_id}: {e}")
             return False
@@ -218,10 +362,33 @@ class SupabaseClient:
                 'used': False,
                 'created_at': datetime.utcnow().isoformat()
             }
-            response = self.client.table('password_reset_tokens').insert(token_data).execute()
-            if response.data:
-                return response.data[0]
-            return None
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("""
+                        INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, used, created_at)
+                        VALUES (:user_id, :token_hash, :expires_at, :used, :created_at)
+                        RETURNING *
+                    """),
+                    token_data
+                )
+                token_record = result.fetchone()
+                session.commit()
+                token_record = result.fetchone()
+                if token_record:
+                    # Convert any UUID objects to strings
+                    token_data = dict(token_record)
+                    for key, value in token_data.items():
+                        if isinstance(value, uuid.UUID):
+                            token_data[key] = str(value)
+                        # 处理 SQLite 数据库中的整数 ID
+                        elif key == 'id' and isinstance(value, int):
+                            token_data[key] = str(value)
+                    return token_data
+                return None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error saving reset token for user {user_id}: {e}")
             return None
@@ -229,8 +396,33 @@ class SupabaseClient:
     async def get_reset_token(self, token_hash: str) -> Optional[Dict[str, Any]]:
         """Get password reset token"""
         try:
-            response = self.client.table('password_reset_tokens').select('*').eq('token_hash', token_hash).eq('used', False).gte('expires_at', datetime.utcnow().isoformat()).single().execute()
-            return response.data if response.data else None
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("""
+                        SELECT * FROM password_reset_tokens 
+                        WHERE token_hash = :token_hash 
+                        AND used = false 
+                        AND expires_at >= :now
+                    """),
+                    {"token_hash": token_hash, "now": datetime.utcnow().isoformat()}
+                )
+                token_record = result.fetchone()
+                if token_record:
+                    token_dict = dict(token_record)
+                    # 处理 SQLite 数据库中的整数 ID
+                    for key, value in token_dict.items():
+                        if isinstance(value, uuid.UUID):
+                            token_dict[key] = str(value)
+                        elif key == 'id' and isinstance(value, int):
+                            token_dict[key] = str(value)
+                        elif key == 'user_id' and isinstance(value, int):
+                            token_dict[key] = str(value)
+                    return token_dict
+                return None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error getting reset token: {e}")
             return None
@@ -238,8 +430,18 @@ class SupabaseClient:
     async def mark_reset_token_used(self, token_id: str) -> bool:
         """Mark password reset token as used"""
         try:
-            response = self.client.table('password_reset_tokens').update({'used': True}).eq('id', token_id).execute()
-            return bool(response.data)
+            # 使用直接PostgreSQL连接
+            session = get_db_session()
+            try:
+                result = session.execute(
+                    sqlalchemy.text("UPDATE password_reset_tokens SET used = true WHERE id = :token_id RETURNING id"),
+                    {"token_id": token_id}
+                )
+                session_record = result.fetchone()
+                session.commit()
+                return result.fetchone() is not None
+            finally:
+                session.close()
         except Exception as e:
             logger.error(f"Error marking reset token as used {token_id}: {e}")
             return False

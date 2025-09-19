@@ -14,7 +14,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # JWT Configuration
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+# 从环境变量获取 JWT 密钥，如果未设置则使用默认值
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or os.getenv("SUPABASE_JWT_SECRET") or "your-secret-key-change-in-production"
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 1
 REFRESH_TOKEN_EXPIRE_DAYS = 30

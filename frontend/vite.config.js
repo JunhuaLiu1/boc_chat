@@ -11,6 +11,8 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
+        // 添加 WebSocket 支持
+        ws: true
       }
     }
   }

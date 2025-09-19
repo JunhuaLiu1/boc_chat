@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.websockets import WebSocketDisconnect
 import json
 import logging
 from dotenv import load_dotenv
@@ -24,9 +25,20 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BOCAI Chat MVP", version="1.0.0")
 
+# 获取 CORS 配置
+cors_origins = os.getenv("CORS_ORIGINS", "*")
+# 如果是字符串格式的列表，则解析它
+if isinstance(cors_origins, str) and cors_origins.startswith('['):
+    import json
+    cors_origins = json.loads(cors_origins)
+elif cors_origins == "*":
+    cors_origins = ["*"]
+elif isinstance(cors_origins, str):
+    cors_origins = [cors_origins]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],  # 前端地址
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -302,6 +314,11 @@ async def websocket_endpoint(websocket: WebSocket):
     history = []
     try:
         while True:
+            # 检查连接状态
+            if websocket.client_state.name != "CONNECTED":
+                logger.warning("WebSocket connection is not in CONNECTED state")
+                break
+                
             data = await websocket.receive_text()
             logger.info(f"Received message: {repr(data)}")  # 使用 repr 查看实际内容
             
@@ -446,14 +463,23 @@ async def websocket_endpoint(websocket: WebSocket):
             # Persist history for next turns: user first, then assistant
             history.append(user_message)
             history.append({"role": "assistant", "content": full_response})
+    except WebSocketDisconnect as e:
+        logger.info(f"WebSocket disconnected: code={e.code}, reason={e.reason}")
+        # 1001 是正常关闭，不需要特殊处理
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
         import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
+        # 尝试发送错误信息给客户端
+        try:
+            if websocket.client_state.name == "CONNECTED":
+                await websocket.send_text(f"Error: {str(e)}")
+        except:
+            pass
     finally:
         logger.info("WebSocket connection closed")
         try:
             if websocket.client_state.name == "CONNECTED":
-                await websocket.close()
+                await websocket.close(code=1000, reason="Server closing")
         except:
             pass
