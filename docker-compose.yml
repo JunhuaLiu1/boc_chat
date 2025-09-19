@@ -5,23 +5,69 @@ services:
     build: ./backend
     environment:
       - API_KEY=${API_KEY}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - MAX_FILE_SIZE_BYTES=${MAX_FILE_SIZE_BYTES:-20971520}
+      - ALLOWED_EXTENSIONS=${ALLOWED_EXTENSIONS:-pdf,docx,xlsx,xls}
+      - EMBEDDING_DIM=${EMBEDDING_DIM:-384}
+      - SEARCH_TOP_K=${SEARCH_TOP_K:-6}
+      - RAG_MAX_CONTEXT_CHARS=${RAG_MAX_CONTEXT_CHARS:-6000}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     ports:
       - "8000:8000"
+    volumes:
+      # 持久化存储文件和向量数据库
+      - ./backend/storage:/app/storage
+      - ./backend/data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   frontend:
     build: ./frontend
+    environment:
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000}
+      - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8000/chat}
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    volumes:
+      # 开发时热重载支持
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
 
   nginx:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"  # HTTPS 支持
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf
       - ./frontend/build:/usr/share/nginx/html
+      # 添加日志卷
+      - ./logs/nginx:/var/log/nginx
     depends_on:
       - backend
       - frontend
+    restart: unless-stopped
+
+# 添加网络配置
+networks:
+  default:
+    name: bocai-network
+    driver: bridge
+
+# 添加卷配置
+volumes:
+  backend_storage:
+    driver: local
+  backend_data:
+    driver: local
+  nginx_logs:
+    driver: local

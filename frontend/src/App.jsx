@@ -1,18 +1,29 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import Sidebar from './components/Sidebar';
 import ChatBox from './components/ChatBox';
 import InputBar from './components/InputBar';
 import Header from './components/Header';
 import ConnectionStatus from './components/ConnectionStatus';
+import ProtectedRoute from './components/ProtectedRoute';
+import { AuthProvider } from './hooks/useAuth';
 import useTheme from './hooks/useTheme';
 import useConversations from './hooks/useConversations';
 import useWebSocket from './hooks/useWebSocket';
 import useSidebar from './hooks/useSidebar';
 
 const App = () => {
+  return (
+    <AuthProvider>
+      <MainApp />
+    </AuthProvider>
+  );
+};
+
+const MainApp = () => {
   const messagesEndRef = useRef(null);
+  const [ragMode, setRagMode] = useState(false); // RAG模式状态
   
-  // 使用自定义 Hooks 管理不同的功能模块
+  // 使用自定义Hooks 管理不同的功能模块
   const { darkMode, toggleDarkMode } = useTheme();
   const {
     conversations,
@@ -83,8 +94,6 @@ const App = () => {
     return newId;
   };
 
-
-
   const handleSendMessage = (text) => {
     if (!text.trim()) {
       return;
@@ -97,7 +106,7 @@ const App = () => {
       timestamp: new Date().toISOString()
     };
 
-    // 创建一个空的 AI 消息用于流式响应
+    // 创建一个空的AI 消息用于流式响应
     const aiMessage = {
       id: Date.now() + 1,
       text: '',
@@ -119,53 +128,58 @@ const App = () => {
       updateConversationTitle(currentConversationId, text);
     }
     
-    // 发送消息到 WebSocket
-    sendMessage(text, currentConversationId);
+    // 发送消息到 WebSocket（根据RAG模式决定是否使用知识库）
+    sendMessage(text, currentConversationId, ragMode);
   };
 
   return (
-    <div className="flex h-screen bg-white dark:bg-gray-900">
-      {/* 侧边栏 */}
-      <Sidebar
-        conversations={conversations}
-        currentConversationId={currentConversationId}
-        onNewConversation={handleNewConversationWithSidebar}
-        onSelectConversation={handleSelectConversation}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-
-      {/* 主内容区域 */}
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* 顶部导航栏 */}
-        <Header 
-          currentConversationTitle={currentConversation?.title}
-          darkMode={darkMode}
-          onToggleDarkMode={toggleDarkMode}
+    <ProtectedRoute>
+      <div className="flex h-screen bg-white dark:bg-gray-900">
+        {/* 侧边栏*/}
+        <Sidebar
+          conversations={conversations}
+          currentConversationId={currentConversationId}
+          onNewConversation={handleNewConversationWithSidebar}
+          onSelectConversation={handleSelectConversation}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebarCollapse}
+          ragMode={ragMode}
+          onRagModeChange={setRagMode}
         />
 
-        {/* 聊天区域 - 占满全部空间 */}
-        <main className="flex-1 overflow-hidden bg-gray-50/50 dark:bg-gray-900/50 backdrop-blur-sm flex flex-col">
-          {/* 消息区域 */}
-          <div className="flex-1 overflow-hidden p-6">
-            <ChatBox messages={messages} messagesEndRef={messagesEndRef} />
-          </div>
-          
-          {/* 输入框区域 */}
-          <div style={{ transform: 'translateY(-32px)' }}>
-            <InputBar 
-              onSend={handleSendMessage} 
-              disabled={isConnecting || getConnectionStatus() !== 'connected'}
-            />
-            <ConnectionStatus 
-              isConnecting={isConnecting}
-              connectionStatus={getConnectionStatus()}
-              onReconnect={handleReconnect}
-            />
-          </div>
-        </main>
+        {/* 主内容区域*/}
+        <div className="flex flex-col flex-1 min-w-0">
+          {/* 顶部导航栏*/}
+          <Header 
+            currentConversationTitle={currentConversation?.title}
+            darkMode={darkMode}
+            onToggleDarkMode={toggleDarkMode}
+          />
+
+          {/* 聊天区域 - 占满全部空间 */}
+          <main className="flex-1 overflow-hidden bg-gray-50/50 dark:bg-gray-900/50 backdrop-blur-sm flex flex-col">
+            {/* 消息区域 */}
+            <div className="flex-1 overflow-hidden p-6">
+              <ChatBox messages={messages} messagesEndRef={messagesEndRef} />
+            </div>
+            
+            {/* 输入框区域*/}
+            <div style={{ transform: 'translateY(-32px)' }}>
+              <InputBar 
+                onSend={handleSendMessage} 
+                disabled={isConnecting || getConnectionStatus() !== 'connected'}
+                ragMode={ragMode}
+              />
+              <ConnectionStatus 
+                isConnecting={isConnecting}
+                connectionStatus={getConnectionStatus()}
+                onReconnect={handleReconnect}
+              />
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </ProtectedRoute>
   );
 };
 

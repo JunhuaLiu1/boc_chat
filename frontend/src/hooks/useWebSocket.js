@@ -9,6 +9,41 @@ const useWebSocket = () => {
   const [isTyping, setIsTyping] = useState(false);
   const websocketRef = useRef(null);
   const activeConversationRef = useRef(null); // 使用 ref 跟踪活跃会话
+  const heartbeatTimerRef = useRef(null);
+  const reconnectTimerRef = useRef(null);
+  const reconnectAttemptRef = useRef(0);
+
+  const clearHeartbeat = () => {
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    }
+  };
+
+  const startHeartbeat = () => {
+    clearHeartbeat();
+    heartbeatTimerRef.current = setInterval(() => {
+      const ws = websocketRef.current;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(JSON.stringify({ type: 'ping', t: Date.now() }));
+        } catch (e) {
+          // ignore
+        }
+      }
+    }, 20000); // 20s 心跳
+  };
+
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimerRef.current) return;
+    const attempt = reconnectAttemptRef.current + 1;
+    reconnectAttemptRef.current = attempt;
+    const delay = Math.min(1000 * Math.pow(2, attempt - 1), 15000); // 指数退避，最大15s
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      connectWebSocket();
+    }, delay);
+  }, []);
 
   // WebSocket 连接管理
   const connectWebSocket = useCallback(() => {
@@ -26,9 +61,10 @@ const useWebSocket = () => {
 
     // 清理之前的连接
     if (websocketRef.current) {
-      websocketRef.current.close();
+      try { websocketRef.current.close(); } catch {}
       websocketRef.current = null;
     }
+    clearHeartbeat();
 
     setIsConnecting(true);
     console.log('开始连接 WebSocket...');
@@ -40,10 +76,16 @@ const useWebSocket = () => {
       ws.onopen = () => {
         console.log('WebSocket 连接成功');
         setIsConnecting(false);
+        reconnectAttemptRef.current = 0;
+        startHeartbeat();
       };
 
       ws.onmessage = (event) => {
         const chunk = event.data;
+        if (chunk === 'pong') {
+          // 心跳响应
+          return;
+        }
         const currentActiveId = activeConversationRef.current;
         console.log('收到消息块:', chunk, '目标会话:', currentActiveId);
         
@@ -73,6 +115,8 @@ const useWebSocket = () => {
         setIsConnecting(false);
         setIsTyping(false);
         activeConversationRef.current = null;
+        clearHeartbeat();
+        scheduleReconnect();
       };
 
       ws.onerror = (error) => {
@@ -80,26 +124,30 @@ const useWebSocket = () => {
         setIsConnecting(false);
         setIsTyping(false);
         activeConversationRef.current = null;
+        try { ws.close(); } catch {}
+        clearHeartbeat();
+        scheduleReconnect();
       };
     } catch (error) {
       console.error('创建WebSocket连接失败:', error);
       setIsConnecting(false);
+      scheduleReconnect();
     }
-  }, []);
+  }, [scheduleReconnect]);
 
   // 在组件挂载时连接 WebSocket
   useEffect(() => {
     // 初始连接
     connectWebSocket();
     
-    // 设置定时检查连接状态
+    // 设置定时检查连接状态（兜底）
     const connectionChecker = setInterval(() => {
       // 直接检查 WebSocket 状态
       if (!websocketRef.current || websocketRef.current.readyState === WebSocket.CLOSED) {
         console.log('检测到连接断开，自动重连...');
         connectWebSocket();
       }
-    }, 2000); // 每2秒检查一次
+    }, 20000); // 放宽到20秒，避免与心跳冲突
     
     // 监听页面可见性变化
     const handleVisibilityChange = () => {
@@ -117,8 +165,13 @@ const useWebSocket = () => {
     return () => {
       clearInterval(connectionChecker);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearHeartbeat();
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (websocketRef.current) {
-        websocketRef.current.close();
+        try { websocketRef.current.close(); } catch {}
         websocketRef.current = null;
       }
     };
@@ -144,17 +197,17 @@ const useWebSocket = () => {
   const handleReconnect = () => {
     console.log('手动重连 WebSocket...');
     if (websocketRef.current) {
-      websocketRef.current.close();
+      try { websocketRef.current.close(); } catch {}
       websocketRef.current = null;
     }
-    // 稍微延迟后重连，确保之前的连接完全关闭
+    reconnectAttemptRef.current = 0;
     setTimeout(() => {
       connectWebSocket();
     }, 100);
   };
 
   // 发送消息
-  const sendMessage = (message, conversationId) => {
+  const sendMessage = (message, conversationId, useRag = false) => {
     const connectionStatus = getConnectionStatus();
     if (!message.trim() || connectionStatus !== 'connected') {
       if (connectionStatus !== 'connected') {
@@ -168,8 +221,16 @@ const useWebSocket = () => {
     activeConversationRef.current = conversationId;
     setIsTyping(true);
     
-    // 发送消息到 WebSocket
-    websocketRef.current.send(message);
+    // 构造消息对象，包含RAG控制标志
+    const messageData = {
+      message: message,
+      use_rag: useRag
+    };
+    
+    console.log('发送消息:', messageData);
+    
+    // 发送JSON格式的消息到 WebSocket
+    websocketRef.current.send(JSON.stringify(messageData));
     return true;
   };
 

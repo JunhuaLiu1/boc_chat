@@ -1,29 +1,27 @@
+﻿/**
+ * MessageBubble - 消息气泡组件，支持 Markdown 和代码高亮
+ */
 import React, { useState } from 'react';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'; // 暗色主题
-import { Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Copy } from 'lucide-react';
 import remarkGfm from 'remark-gfm';
 
 // 自定义代码块组件
-const CodeBlock = ({ node, inline, className, children, ...props }) => {
-  const match = /language-(\w+)/.exec(className || '');
+const CodeBlock = ({ children, className, node, ...rest }) => {
   const [copied, setCopied] = useState(false);
-
+  const match = /language-(\w+)/.exec(className || '');
+  
   const handleCopy = () => {
-    navigator.clipboard.writeText(children);
+    navigator.clipboard.writeText(String(children).replace(/\n$/, ''));
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000); // 2秒后重置复制状态
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  // 如果是内联代码或没有指定语言，则使用默认样式
-  if (inline || !match) {
-    return <code className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg text-sm font-mono border border-gray-200/50 dark:border-gray-600/50" {...props}>{children}</code>;
-  }
-
   return (
-    <div className="relative rounded-2xl overflow-hidden my-4 shadow-lg border border-gray-200/20 dark:border-gray-700/20">
-      <div className="flex justify-between items-center bg-gray-900/95 backdrop-blur-sm text-gray-200 text-sm px-4 py-3 border-b border-gray-700/50">
+    <div className="relative group">
+      <div className="flex items-center justify-between bg-gray-800 text-gray-200 px-4 py-2 text-sm rounded-t-lg border-b border-gray-600">
         <span>{match[1]}</span>
         <button
           onClick={handleCopy}
@@ -31,7 +29,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
           aria-label={copied ? "已复制" : "复制代码"}
         >
           <Copy size={14} className="mr-1" />
-          {copied ? '已复制!' : '复制'}
+          {copied ? '已复制' : '复制代码'}
         </button>
       </div>
       <SyntaxHighlighter
@@ -40,7 +38,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
         PreTag="div"
         showLineNumbers
         wrapLines
-        {...props}
+        {...rest}
       >
         {String(children).replace(/\n$/, '')}
       </SyntaxHighlighter>
@@ -68,7 +66,7 @@ const MessageBubble = ({ message }) => {
           remarkPlugins={[remarkGfm]}
           components={{
             code: CodeBlock,
-            // 可以添加更多自定义组件，例如链接在新窗口打开等
+            // 可以添加更多自定义组件，例如链接在新窗口打开
             a: ({node, ...props}) => <a target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline" {...props} />,
             // 添加其他 Markdown 元素的自定义样式
             h1: ({node, ...props}) => <h1 className="text-2xl font-bold my-2" {...props} />,

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 
 const BocaiIcon = ({ size = 18, className = "" }) => {
   return (
@@ -10,7 +10,7 @@ const BocaiIcon = ({ size = 18, className = "" }) => {
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {/* 外圈 - 代表银行的稳定性 */}
+      {/* 外圈 - 代表银行的稳定?*/}
       <circle 
         cx="12" 
         cy="12" 
@@ -26,7 +26,7 @@ const BocaiIcon = ({ size = 18, className = "" }) => {
         fill="currentColor"
       />
       
-      {/* 装饰性元素 - 代表智能和创新 */}
+      {/* 装饰性元?- 代表智能和创?*/}
       <circle cx="17" cy="7" r="1.5" fill="currentColor" opacity="0.6" />
       <circle cx="7" cy="17" r="1" fill="currentColor" opacity="0.4" />
     </svg>
@@ -34,3 +34,5 @@ const BocaiIcon = ({ size = 18, className = "" }) => {
 };
 
 export default BocaiIcon;
+
+

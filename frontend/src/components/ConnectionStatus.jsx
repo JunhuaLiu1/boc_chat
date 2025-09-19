@@ -1,11 +1,11 @@
-import React from 'react';
+﻿import React from 'react';
 
 /**
- * 连接状态显示组件
+ * 连接状态显示组?
  * 显示WebSocket连接状态和重连按钮
  */
 const ConnectionStatus = ({ isConnecting, connectionStatus, onReconnect }) => {
-  // 如果连接正常，不显示任何状态信息
+  // 如果连接正常，不显示任何状态信?
   if (connectionStatus === 'connected' && !isConnecting) {
     return null;
   }
@@ -14,12 +14,12 @@ const ConnectionStatus = ({ isConnecting, connectionStatus, onReconnect }) => {
     <div className="text-center text-sm pb-4">
       {isConnecting && (
         <div className="text-gray-500">
-          正在连接服务器...
+          正在连接服务?..
         </div>
       )}
       {connectionStatus !== 'connected' && !isConnecting && (
         <div className="text-red-500">
-          连接已断开，
+          连接已复制代码断开?
           <button 
             onClick={onReconnect}
             className="text-blue-600 hover:text-blue-800 underline ml-1"
@@ -33,3 +33,5 @@ const ConnectionStatus = ({ isConnecting, connectionStatus, onReconnect }) => {
 };
 
 export default ConnectionStatus;
+
+

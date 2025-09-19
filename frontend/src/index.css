@@ -1,6 +1,209 @@
+/* Apple风格字体系统 */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Apple风格基础样式 */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* 苹果风格滚动条 */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-apple-gray-300 dark:bg-apple-gray-600 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-apple-gray-400 dark:bg-apple-gray-500;
+  }
+}
+
+/* Apple风格组件样式 */
+@layer components {
+  /* 按钮组件 */
+  .btn-apple {
+    @apply inline-flex items-center justify-center rounded-apple px-4 py-2 text-apple-base font-apple-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-apple-primary {
+    @apply btn-apple bg-apple-blue text-white hover:bg-apple-blue-dark focus:ring-apple-blue/30 active:bg-apple-blue-dark;
+  }
+  
+  .btn-apple-secondary {
+    @apply btn-apple bg-apple-gray-200 text-apple-gray-900 hover:bg-apple-gray-300 focus:ring-apple-gray-300/30 dark:bg-apple-gray-700 dark:text-apple-gray-100 dark:hover:bg-apple-gray-600;
+  }
+  
+  .btn-apple-ghost {
+    @apply btn-apple bg-transparent text-apple-blue hover:bg-apple-gray-100 focus:ring-apple-blue/30 dark:hover:bg-apple-gray-800;
+  }
+  
+  /* 输入框组件 */
+  .input-apple {
+    @apply w-full h-input px-4 py-3 bg-apple-gray-50 border border-apple-gray-200 rounded-apple text-apple-gray-900 placeholder-apple-gray-500 transition-all duration-200 focus:outline-none focus:border-apple-blue focus:ring-2 focus:ring-apple-blue/30 dark:bg-apple-gray-800 dark:border-apple-gray-700 dark:text-apple-gray-100;
+  }
+  
+  .input-apple-error {
+    @apply border-apple-red focus:border-apple-red focus:ring-apple-red/30;
+  }
+  
+  /* 卡片组件 */
+  .card-apple {
+    @apply bg-white dark:bg-apple-gray-800 rounded-apple-lg shadow-apple border border-apple-gray-200 dark:border-apple-gray-700;
+  }
+  
+  .card-apple-glass {
+    @apply bg-white/80 dark:bg-apple-gray-800/80 backdrop-blur-apple rounded-apple-lg border border-apple-gray-200/50 dark:border-apple-gray-700/50;
+  }
+  
+  /* 文本样式 */
+  .text-apple-heading {
+    @apply text-apple-gray-900 dark:text-apple-gray-100 font-apple-bold;
+  }
+  
+  .text-apple-body {
+    @apply text-apple-gray-700 dark:text-apple-gray-300 font-apple-regular;
+  }
+  
+  .text-apple-caption {
+    @apply text-apple-gray-500 font-apple-regular text-apple-sm;
+  }
+  
+  .text-apple-error {
+    @apply text-apple-red font-apple-medium text-apple-sm;
+  }
+  
+  /* 表单组件 */
+  .form-apple-group {
+    @apply space-y-1;
+  }
+  
+  .form-apple-label {
+    @apply block text-apple-sm font-apple-medium text-apple-gray-700 dark:text-apple-gray-300 mb-1;
+  }
+  
+  /* 认证页面专用样式 */
+  .auth-container {
+    @apply min-h-screen flex items-center justify-center bg-gradient-to-br from-apple-gray-50 to-apple-gray-100 dark:from-apple-gray-900 dark:to-apple-gray-800;
+  }
+  
+  .auth-card {
+    @apply w-full max-w-auth mx-4 p-8 card-apple-glass;
+  }
+  
+  /* 动画效果 */
+  .animate-apple-fade-in {
+    animation: apple-fade-in 0.3s ease-apple;
+  }
+  
+  .animate-apple-slide-up {
+    animation: apple-slide-up 0.3s ease-apple;
+  }
+  
+  .animate-apple-scale-in {
+    animation: apple-scale-in 0.2s ease-apple-spring;
+  }
+}
+
+/* Apple风格动画关键帧 */
+@layer utilities {
+  @keyframes apple-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  @keyframes apple-slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  @keyframes apple-scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  /* 实用工具类 */
+  .glass-effect {
+    @apply backdrop-blur-apple bg-white/80 dark:bg-apple-gray-800/80;
+  }
+  
+  .apple-shadow {
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  }
+  
+  .apple-shadow-lg {
+    box-shadow: 0 10px 25px 0 rgba(0, 0, 0, 0.1), 0 4px 6px 0 rgba(0, 0, 0, 0.05);
+  }
+  
+  /* 焦点样式 */
+  .focus-apple {
+    @apply focus:outline-none focus:ring-2 focus:ring-apple-blue/30 focus:border-apple-blue;
+  }
+  
+  /* 悬停效果 */
+  .hover-apple-lift {
+    @apply hover:-translate-y-0.5 hover:shadow-apple-md transition-all duration-200;
+  }
+}
+
+/* 自定义CSS变量（用于动态主题切换） */
+:root {
+  --color-background: 255 255 255;
+  --color-foreground: 28 28 30;
+  --color-border: 229 229 234;
+}
+
+.dark {
+  --color-background: 28 28 30;
+  --color-foreground: 242 242 247;
+  --color-border: 99 99 102;
+}
+
+.background {
+  background-color: rgb(var(--color-background));
+}
+
+.text-foreground {
+  color: rgb(var(--color-foreground));
+}
+
+.border-border {
+  border-color: rgb(var(--color-border));
+}
 
 /* 可以为 Tailwind 添加一些基础样式 */
 body {
