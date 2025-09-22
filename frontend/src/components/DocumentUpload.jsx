@@ -10,7 +10,7 @@ const DocumentUpload = ({ ragMode, onRagModeChange, onFilesUploaded }) => {
         文档管理
       </h4>
       <div className="text-sm text-gray-500">
-        文档上传功能还没搞好😀
+        文档上传管理功能还没搞好😀
       </div>
     </div>
   );
